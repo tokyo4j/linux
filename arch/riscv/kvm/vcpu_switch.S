@@ -256,7 +256,7 @@ __kvm_riscv_nacl_switch_to_return:
 
 	/* Return to C code */
 	ret
-ENDPROC(__kvm_riscv_switch_to)
+ENDPROC(__kvm_riscv_nacl_switch_to)
 
 ENTRY(__kvm_riscv_unpriv_trap)
 	/*

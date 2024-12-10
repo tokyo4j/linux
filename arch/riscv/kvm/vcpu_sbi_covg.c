@@ -208,6 +208,7 @@ static int kvm_sbi_ext_covg_handler(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	case SBI_EXT_COVG_REMOVE_MMIO_REGION:
 	case SBI_EXT_COVG_ALLOW_EXT_INTERRUPT:
 	case SBI_EXT_COVG_DENY_EXT_INTERRUPT:
+	case SBI_EXT_COVG_SET_PAGES_MERGEABLE:
 		/* We don't really need to do anything here for now. */
 		return 0;
 

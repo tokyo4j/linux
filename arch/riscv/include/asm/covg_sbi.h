@@ -17,6 +17,7 @@ int sbi_covg_add_mmio_region(unsigned long addr, unsigned long len);
 int sbi_covg_remove_mmio_region(unsigned long addr, unsigned long len);
 int sbi_covg_share_memory(unsigned long addr, unsigned long len);
 int sbi_covg_unshare_memory(unsigned long addr, unsigned long len);
+int sbi_covg_set_pages_mergeable(unsigned long addr, unsigned long len);
 int sbi_covg_allow_external_interrupt(unsigned long id);
 int sbi_covg_allow_all_external_interrupt(void);
 int sbi_covg_deny_external_interrupt(unsigned long id);

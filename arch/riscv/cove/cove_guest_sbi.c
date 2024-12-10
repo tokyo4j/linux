@@ -60,6 +60,17 @@ int sbi_covg_unshare_memory(unsigned long addr, unsigned long len)
 	return 0;
 }
 
+int sbi_covg_set_pages_mergeable(unsigned long addr, unsigned long len)
+{
+	struct sbiret ret;
+	ret = sbi_ecall(SBI_EXT_COVG, SBI_EXT_COVG_SET_PAGES_MERGEABLE, addr, len, 0,
+			0, 0, 0);
+	if (ret.error)
+		return sbi_err_map_linux_errno(ret.error);
+
+	return 0;
+}
+
 int sbi_covg_allow_external_interrupt(unsigned long id)
 {
 	struct sbiret ret;

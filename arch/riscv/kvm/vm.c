@@ -238,6 +238,8 @@ long kvm_arch_vm_ioctl(struct file *filp,
 			return -EFAULT;
 
 		return kvm_riscv_cove_vm_measure_pages(kvm, &mr);
+	case KVM_RISCV_COVE_RECLAIM_MERGED_PAGES:
+		return kvm_riscv_cove_vm_reclaim_merged_page(kvm);
 	default:
 		return -EINVAL;
 	}

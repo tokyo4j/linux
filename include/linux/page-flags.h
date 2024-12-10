@@ -139,6 +139,7 @@ enum pageflags {
 #ifdef CONFIG_KASAN_HW_TAGS
 	PG_skip_kasan_poison,
 #endif
+    PG_cove_mergeable,
 	__NR_PAGEFLAGS,
 
 	PG_readahead = PG_reclaim,

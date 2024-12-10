@@ -488,3 +488,15 @@ int sbi_covh_tvm_remove_pages(unsigned long tvmid,
 
 	return 0;
 }
+
+int sbi_covh_reclaim_merged_pages(unsigned long tvmid, unsigned long *paddr)
+{
+	struct sbiret ret = sbi_ecall(SBI_EXT_COVH,
+				      SBI_EXT_COVH_RECLAIM_MERGED_PAGES, tvmid,
+				      0, 0, 0, 0, 0);
+	if (ret.error)
+		return sbi_err_map_linux_errno(ret.error);
+	
+	*paddr = (unsigned long)ret.value;
+	return 0;
+}

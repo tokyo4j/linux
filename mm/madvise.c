@@ -32,6 +32,8 @@
 #include <linux/shmem_fs.h>
 #include <linux/mmu_notifier.h>
 
+#include <asm/covg_sbi.h>
+#include <asm/cove.h>
 #include <asm/tlb.h>
 
 #include "internal.h"
@@ -1006,6 +1008,31 @@ static long madvise_remove(struct vm_area_struct *vma,
 	return error;
 }
 
+static int
+handle_pte(pte_t *pte, unsigned long addr,
+	unsigned long next, struct mm_walk *walk)
+{
+	if (is_cove_guest()) {
+		unsigned long pfn = pte_pfn(*pte); 
+		unsigned long pa = pfn_to_phys(pfn);
+		struct page *page = pfn_to_page(pfn);
+		if (test_bit(PG_cove_mergeable, &page->flags)) {
+			// pr_info("page is already set mergeable\n");
+			return 0;
+		} else {
+			set_bit(PG_cove_mergeable, &page->flags);
+			// pr_info("setting a page mergeable\n");
+			return sbi_covg_set_pages_mergeable(pa, 4096);
+		}
+	} else {
+		return 0;
+	}
+}
+
+const struct mm_walk_ops cove_mm_walk_ops = {
+	.pte_entry = handle_pte,
+};
+
 /*
  * Apply an madvise behavior to a region of a vma.  madvise_update_vma
  * will handle splitting a vm area into separate areas, each area with its own
@@ -1084,6 +1111,9 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 		break;
 	case MADV_COLLAPSE:
 		return madvise_collapse(vma, prev, start, end);
+	case MADV_COVE_MERGEABLE:;
+		return walk_page_range_vma(vma, start, end, &cove_mm_walk_ops, NULL);
+		// return 0;
 	}
 
 	anon_name = anon_vma_name(vma);
@@ -1187,6 +1217,7 @@ madvise_behavior_valid(int behavior)
 	case MADV_SOFT_OFFLINE:
 	case MADV_HWPOISON:
 #endif
+	case MADV_COVE_MERGEABLE:
 		return true;
 
 	default:

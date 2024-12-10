@@ -79,6 +79,8 @@
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
 
+#define MADV_COVE_MERGEABLE 26
+
 /* compatibility flags */
 #define MAP_FILE	0
 

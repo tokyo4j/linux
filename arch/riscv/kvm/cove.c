@@ -793,6 +793,32 @@ int kvm_riscv_cove_vm_measure_pages(struct kvm *kvm, struct kvm_riscv_cove_measu
 	return rc;
 }
 
+int kvm_riscv_cove_vm_reclaim_merged_page(struct kvm *kvm)
+{
+	unsigned long reclaimed_addr;
+	int ret;
+	struct kvm_riscv_cove_page *conf_page, *next;
+	struct kvm_cove_tvm_context *tvmc = kvm->arch.tvmc;
+
+	ret = sbi_covh_reclaim_merged_pages(kvm->arch.tvmc->tvm_guest_id, &reclaimed_addr);
+	if (ret < 0)
+		return ret;
+
+	list_for_each_entry_safe(conf_page, next, &tvmc->measured_pages, link) {
+		if (page_to_phys(conf_page->page) == reclaimed_addr) {
+			list_del(&conf_page->link);
+			goto found_conf_page;
+		}
+	}
+	pr_info("matching confidential page not found\n");
+	return -EINVAL;
+
+found_conf_page:
+	put_page(conf_page->page);
+	kfree(conf_page);
+	return ret;
+}
+
 int kvm_riscv_cove_vm_add_memreg(struct kvm *kvm, unsigned long gpa, unsigned long size)
 {
 	int rc;

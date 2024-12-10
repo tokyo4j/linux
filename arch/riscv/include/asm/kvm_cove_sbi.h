@@ -78,6 +78,7 @@ int sbi_covh_tvm_demote_page(unsigned long tvmid,
 int sbi_covh_tvm_remove_pages(unsigned long tvmid,
 			      unsigned long tvm_base_page_addr,
 			      unsigned long len);
+int sbi_covh_reclaim_merged_pages(unsigned long tvmid, unsigned long *paddr);
 
 /* Functions related to CoVE Interrupt Management(COVI) Extension */
 int sbi_covi_tvm_aia_init(unsigned long tvm_gid, struct sbi_cove_tvm_aia_params *tvm_aia_params);

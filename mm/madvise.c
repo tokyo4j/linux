@@ -1238,6 +1238,75 @@ static long madvise_guard_remove(struct vm_area_struct *vma,
 			       &guard_remove_walk_ops, NULL);
 }
 
+#include <linux/arm-smccc.h>
+#include <linux/cc_platform.h>
+
+struct mergeable_chunk {
+	unsigned long start_pa, end_pa;
+};
+
+static void
+set_chunk_mergeable(struct mergeable_chunk *chunk)
+{
+	// pr_info("set_chunk_mergeable() %lx-%lx\n", chunk->start_pa, chunk->end_pa);
+	if (!chunk->start_pa) {
+		return;
+	}
+	for (int pa = chunk->start_pa; pa <= chunk->end_pa; pa += 4096) {
+		struct page *page = phys_to_page(pa);
+		set_bit(PG_cca_mergeable, &page->flags);
+	}
+	struct arm_smccc_res res;
+	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE,
+		chunk->start_pa, chunk->end_pa - chunk->start_pa + 4096, &res);
+}
+
+static int
+handle_pte(pte_t *pte, unsigned long addr,
+	unsigned long next, struct mm_walk *walk)
+{
+	unsigned long pfn = pte_pfn(*pte);
+	unsigned long pa = __pfn_to_phys(pfn);
+	struct page *page = pfn_to_page(pfn);
+	struct mergeable_chunk *chunk = walk->private;
+
+	if (test_bit(PG_cca_mergeable, &page->flags)) {
+		// pr_info("page is already set mergeable\n");
+		return 0;
+	}
+
+	if (!chunk->start_pa) {
+		// initialize the chunk with the first page encountered
+		chunk->start_pa = chunk->end_pa = pa;
+	} else if (chunk->end_pa + 4096 != pa) {
+		// the new page is not contiguous to chunk, make the chunk mergeable
+		// and reset it to the current page
+		set_chunk_mergeable(chunk);
+		chunk->start_pa = chunk->end_pa = pa;
+	} else {
+		// the new page is contiguous to chunk, append the page to the chunk
+		chunk->end_pa = pa;
+	}
+
+	return 0;
+}
+
+const struct mm_walk_ops cca_mm_walk_ops = {
+	.pte_entry = handle_pte,
+};
+
+static int
+set_range_mergeable(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+{
+	struct mergeable_chunk chunk = {0};
+	if (!is_realm_world()) {
+		return 0;
+	}
+	walk_page_range_vma(vma, start, end, &cca_mm_walk_ops, &chunk);
+	set_chunk_mergeable(&chunk);
+	return 0;
+}
+
 /*
  * Apply an madvise behavior to a region of a vma.  madvise_update_vma
  * will handle splitting a vm area into separate areas, each area with its own
@@ -1319,6 +1388,8 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 		break;
 	case MADV_COLLAPSE:
 		return madvise_collapse(vma, prev, start, end);
+	case MADV_CCA_MERGEABLE:
+		return set_range_mergeable(vma, start, end);
 	case MADV_GUARD_INSTALL:
 		return madvise_guard_install(vma, prev, start, end);
 	case MADV_GUARD_REMOVE:
@@ -1428,6 +1499,7 @@ madvise_behavior_valid(int behavior)
 	case MADV_SOFT_OFFLINE:
 	case MADV_HWPOISON:
 #endif
+	case MADV_CCA_MERGEABLE:
 		return true;
 
 	default:

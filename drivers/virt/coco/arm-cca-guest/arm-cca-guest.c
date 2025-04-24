@@ -14,6 +14,14 @@
 
 #include <asm/rsi.h>
 
+#include <linux/kvm_host.h>
+#include <asm/rsi_smc.h>
+// #include <asm/kvm_emulate.h>
+// #include <asm/kvm_mmu.h>
+// #include <asm/rmi_cmds.h>
+// #include <asm/virt.h>
+// #include <asm/kvm_pgtable.h>
+
 /**
  * struct arm_cca_token_info - a descriptor for the token buffer.
  * @challenge:		Pointer to the challenge data
@@ -205,6 +213,19 @@ static int __init arm_cca_guest_init(void)
 	ret = tsm_register(&arm_cca_tsm_ops, NULL);
 	if (ret < 0)
 		pr_err("Error %d registering with TSM\n", ret);
+
+	char *buf1 = (char *)get_zeroed_page(GFP_KERNEL);
+	strcpy(buf1, "hello-ljflkjdslkafdjsafldjsafhdiaiuafiu");
+	phys_addr_t granule1 = virt_to_phys(buf1);
+	struct arm_smccc_res res;
+	pr_info("Sending SMC_RSI_SET_PAGES_MERGEABLE %s %llx\n", buf1, granule1);
+	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule1, 4096, &res);
+
+	char *buf2 = (char *)get_zeroed_page(GFP_KERNEL);
+	strcpy(buf2, "hello-ljflkjdslkafdjsafldjsafhdiaiuafiu");
+	phys_addr_t granule2 = virt_to_phys(buf2);
+	pr_info("Sending SMC_RSI_SET_PAGES_MERGEABLE %s %llx\n", buf2, granule2);
+	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule2, 4096, &res);
 
 	return ret;
 }

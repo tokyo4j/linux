@@ -1366,6 +1366,7 @@ static int kvm_rme_config_realm(struct kvm *kvm, struct kvm_enable_cap *cap)
 int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 {
 	int r = 0;
+	struct arm_smccc_res res = {0};
 
 	if (!kvm_is_realm(kvm))
 		return -EINVAL;
@@ -1403,6 +1404,15 @@ int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 	}
 	case KVM_CAP_ARM_RME_ACTIVATE_REALM:
 		r = kvm_activate_realm(kvm);
+		break;
+	case KVM_CAP_ARM_RME_RECLAIM_MERGED_PAGE:
+		arm_smccc_1_1_invoke(SMC_RMI_RECLAIM_MERGEABLE_PAGE, 123, &res);
+		if (res.a0) {
+			r = -EINVAL;
+		} else {
+			pr_info("Reclaimed pa=%lx\n", res.a1);
+			r = 0;
+		}
 		break;
 	default:
 		r = -EINVAL;

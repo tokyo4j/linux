@@ -190,4 +190,6 @@ struct realm_config {
  */
 #define SMC_RSI_HOST_CALL			SMC_RSI_FID(0x199)
 
+#define SMC_RSI_SET_PAGES_MERGEABLE	    SMC_RSI_FID(0x1B0)
+
 #endif /* __ASM_RSI_SMC_H_ */

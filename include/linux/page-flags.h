@@ -127,6 +127,7 @@ enum pageflags {
 #ifdef CONFIG_ARCH_USES_PG_ARCH_3
 	PG_arch_3,
 #endif
+	PG_cca_mergeable,
 	__NR_PAGEFLAGS,
 
 	PG_readahead = PG_reclaim,

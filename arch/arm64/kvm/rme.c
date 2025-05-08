@@ -1363,10 +1363,12 @@ static int kvm_rme_config_realm(struct kvm *kvm, struct kvm_enable_cap *cap)
 	return r;
 }
 
+#include "linux/pagemap.h"
+long mapping_evict_folio(struct address_space *mapping, struct folio *folio);
+
 int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 {
 	int r = 0;
-	struct arm_smccc_res res = {0};
 
 	if (!kvm_is_realm(kvm))
 		return -EINVAL;
@@ -1405,15 +1407,31 @@ int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 	case KVM_CAP_ARM_RME_ACTIVATE_REALM:
 		r = kvm_activate_realm(kvm);
 		break;
-	case KVM_CAP_ARM_RME_RECLAIM_MERGED_PAGE:
+	case KVM_CAP_ARM_RME_RECLAIM_MERGED_PAGE: {
+		struct arm_smccc_res res = {0};
+		uint64_t hpa;
+		struct page *page;
+		struct folio *folio;
+		struct inode *inode;
+
 		arm_smccc_1_1_invoke(SMC_RMI_RECLAIM_MERGEABLE_PAGE, 123, &res);
 		if (res.a0) {
 			r = -EINVAL;
-		} else {
-			pr_info("Reclaimed pa=%lx\n", res.a1);
-			r = 0;
+			break;
 		}
+		hpa = res.a1;
+		page = phys_to_page(hpa);
+		folio = page_folio(page);
+		inode = folio->mapping->host;
+		folio_lock(folio);
+		mapping_evict_folio(inode->i_mapping, folio);
+		folio_unlock(folio);
+		pr_info("Reclaimed pa=%llx page_ref_count(page)=%d\n",
+			hpa, page_ref_count(page));
+		put_page(page);
+		r = 0;
 		break;
+	}
 	default:
 		r = -EINVAL;
 		break;

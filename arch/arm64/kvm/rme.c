@@ -832,6 +832,8 @@ static int fold_rtt(struct realm *realm, unsigned long addr, int level)
 	return 0;
 }
 
+struct xarray converted_pages;
+
 int realm_map_protected(struct realm *realm,
 			unsigned long ipa,
 			kvm_pfn_t pfn,
@@ -875,6 +877,11 @@ int realm_map_protected(struct realm *realm,
 			 */
 			return 0;
 		}
+
+		if (!converted_pages.xa_flags) {
+			xa_init_flags(&converted_pages, XA_FLAGS_LOCK_BH);
+		}
+		xa_store(&converted_pages, phys, (void *)ipa, GFP_KERNEL);
 
 		ret = rmi_data_create_unknown(rd, phys, ipa);
 
@@ -1409,7 +1416,7 @@ int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 		break;
 	case KVM_CAP_ARM_RME_RECLAIM_MERGED_PAGE: {
 		struct arm_smccc_res res = {0};
-		uint64_t hpa;
+		uint64_t hpa, ipa;
 		struct page *page;
 		struct folio *folio;
 		struct inode *inode;
@@ -1420,14 +1427,15 @@ int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 			break;
 		}
 		hpa = res.a1;
+		ipa = (uint64_t)xa_load(&converted_pages, hpa);
 		page = phys_to_page(hpa);
 		folio = page_folio(page);
 		inode = folio->mapping->host;
 		folio_lock(folio);
 		mapping_evict_folio(inode->i_mapping, folio);
 		folio_unlock(folio);
-		pr_info("Reclaimed pa=%llx page_ref_count(page)=%d\n",
-			hpa, page_ref_count(page));
+		pr_info("Reclaimed pa=%llx ipa=%llx page_ref_count(page)=%d\n",
+			hpa, ipa, page_ref_count(page));
 		put_page(page);
 		r = 0;
 		break;

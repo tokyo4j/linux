@@ -194,6 +194,29 @@ static const struct tsm_ops arm_cca_tsm_ops = {
 	.report_new = arm_cca_report_new,
 };
 
+static char *set_page_mergeable(const char *content)
+{
+	char *buf = (char *)get_zeroed_page(GFP_KERNEL);
+	strcpy(buf, content);
+	phys_addr_t granule = virt_to_phys(buf);
+	pr_info("Sending SMC_RSI_SET_PAGES_MERGEABLE content=%s ipa=%llx\n", buf, granule);
+	struct arm_smccc_res res;
+	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule, 4096, &res);
+	return buf;
+}
+
+static char *bufs[16];
+
+static void merge_test_cb(struct work_struct *work)
+{
+	pr_info("\n");
+	for (int i = 0; i < (int)ARRAY_SIZE(bufs); i++){
+		pr_info("buf[%d]=%s\n", i, bufs[i]);
+	}
+}
+
+DECLARE_DELAYED_WORK(merge_test_work, merge_test_cb);
+
 /**
  * arm_cca_guest_init - Register with the Trusted Security Module (TSM)
  * interface.
@@ -214,18 +237,16 @@ static int __init arm_cca_guest_init(void)
 	if (ret < 0)
 		pr_err("Error %d registering with TSM\n", ret);
 
-	char *buf1 = (char *)get_zeroed_page(GFP_KERNEL);
-	strcpy(buf1, "hello-ljflkjdslkafdjsafldjsafhdiaiuafiu");
-	phys_addr_t granule1 = virt_to_phys(buf1);
-	struct arm_smccc_res res;
-	pr_info("Sending SMC_RSI_SET_PAGES_MERGEABLE %s %llx\n", buf1, granule1);
-	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule1, 4096, &res);
+	for (int i = 0; i < (int)ARRAY_SIZE(bufs); i++) {
+		char buf[64];
+		snprintf(buf, sizeof(buf), "hello-%c",
+			i < 2 ? 'a' : 'a' + i - 2);
+		bufs[i] = set_page_mergeable(buf);
+	}
 
-	char *buf2 = (char *)get_zeroed_page(GFP_KERNEL);
-	strcpy(buf2, "hello-ljflkjdslkafdjsafldjsafhdiaiuafiu");
-	phys_addr_t granule2 = virt_to_phys(buf2);
-	pr_info("Sending SMC_RSI_SET_PAGES_MERGEABLE %s %llx\n", buf2, granule2);
-	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule2, 4096, &res);
+	schedule_delayed_work(&merge_test_work, 300);
+
+	// buf1[0] = 'x';
 
 	return ret;
 }

@@ -114,6 +114,12 @@ static int rec_exit_host_call(struct kvm_vcpu *vcpu)
 
 	vcpu->stat.hvc_exit_stat++;
 
+	if (rec->run->exit.gprs[0] == 0xdeadcafe) {
+		pr_info("From victim: ipa=%llx\n", rec->run->exit.gprs[1]);
+	} else if (rec->run->exit.gprs[0] == 0xdeadcaff) {
+		pr_info("From attacker: ipa=%llx\n", rec->run->exit.gprs[1]);
+	}
+
 	for (i = 0; i < REC_RUN_GPRS; i++)
 		vcpu_set_reg(vcpu, i, rec->run->exit.gprs[i]);
 

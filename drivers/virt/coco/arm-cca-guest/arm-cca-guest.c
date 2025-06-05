@@ -16,6 +16,7 @@
 
 #include <linux/kvm_host.h>
 #include <asm/rsi_smc.h>
+#include <linux/delay.h>
 // #include <asm/kvm_emulate.h>
 // #include <asm/kvm_mmu.h>
 // #include <asm/rmi_cmds.h>
@@ -194,28 +195,65 @@ static const struct tsm_ops arm_cca_tsm_ops = {
 	.report_new = arm_cca_report_new,
 };
 
+static unsigned int is_attacker;
+module_param(is_attacker, uint, S_IRUGO);
+MODULE_PARM_DESC(is_attacker, "this is a test parameter");
+
 static char *set_page_mergeable(const char *content)
 {
 	char *buf = (char *)get_zeroed_page(GFP_KERNEL);
 	strcpy(buf, content);
 	phys_addr_t granule = virt_to_phys(buf);
-	pr_info("Sending SMC_RSI_SET_PAGES_MERGEABLE content=%s ipa=%llx\n", buf, granule);
+	pr_info("%s: Sending SMC_RSI_SET_PAGES_MERGEABLE content=%s ipa=%llx\n",
+		is_attacker ? "Attacker" : "Victim", buf, granule);
 	struct arm_smccc_res res;
 	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule, 4096, &res);
 	return buf;
 }
 
-static char *bufs[16];
+static char *pages[64];
 
-static void merge_test_cb(struct work_struct *work)
+static void send_ipa_to_host(uint64_t id, uint64_t va)
 {
-	pr_info("\n");
-	for (int i = 0; i < (int)ARRAY_SIZE(bufs); i++){
-		pr_info("buf[%d]=%s\n", i, bufs[i]);
-	}
+	uint64_t *gprs = (uint64_t *)get_zeroed_page(GFP_KERNEL);
+	gprs[1 + 0] = id;
+	gprs[1 + 1] = __pa(va);
+	struct arm_smccc_res res;
+	arm_smccc_1_1_invoke(SMC_RSI_HOST_CALL, virt_to_phys(gprs), &res);
+	free_page((unsigned long)gprs);
 }
 
-DECLARE_DELAYED_WORK(merge_test_work, merge_test_cb);
+static void victim_func(struct work_struct *work)
+{
+	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
+		char content[64];
+		if (i < (int)ARRAY_SIZE(pages) / 2) {
+			snprintf(content, sizeof(content), "hello-%c", 'a' + i);
+		} else {
+			snprintf(content, sizeof(content), "victim-%c", 'a' + i);
+		}
+		pages[i] = set_page_mergeable(content);
+		send_ipa_to_host(0xdeadcafe, (uint64_t)pages[i]);
+		msleep(200);
+	}
+}
+DECLARE_DELAYED_WORK(victim_work, victim_func);
+
+static void attacker_func(struct work_struct *work)
+{
+	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
+		char content[64];
+		if (i < (int)ARRAY_SIZE(pages) / 2) {
+			snprintf(content, sizeof(content), "hello-%c", 'a' + i);
+		} else {
+			snprintf(content, sizeof(content), "attacker-%c", 'a' + i);
+		}
+		pages[i] = set_page_mergeable(content);
+		send_ipa_to_host(0xdeadcaff, (uint64_t)pages[i]);
+		msleep(200);
+	}
+}
+DECLARE_DELAYED_WORK(attacker_work, attacker_func);
 
 /**
  * arm_cca_guest_init - Register with the Trusted Security Module (TSM)
@@ -237,14 +275,13 @@ static int __init arm_cca_guest_init(void)
 	if (ret < 0)
 		pr_err("Error %d registering with TSM\n", ret);
 
-	for (int i = 0; i < (int)ARRAY_SIZE(bufs); i++) {
-		char buf[64];
-		snprintf(buf, sizeof(buf), "hello-%c",
-			i < 2 ? 'a' : 'a' + i - 2);
-		bufs[i] = set_page_mergeable(buf);
-	}
+	pr_info("is_attacker=%d\n", is_attacker);
 
-	schedule_delayed_work(&merge_test_work, 300);
+	if (is_attacker) {
+		schedule_delayed_work(&attacker_work, 3000);
+	} else {
+		schedule_delayed_work(&victim_work, 300);
+	}
 
 	// buf1[0] = 'x';
 

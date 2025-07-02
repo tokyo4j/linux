@@ -197,15 +197,23 @@ static const struct tsm_ops arm_cca_tsm_ops = {
 
 static unsigned int is_attacker;
 module_param(is_attacker, uint, S_IRUGO);
-MODULE_PARM_DESC(is_attacker, "this is a test parameter");
+MODULE_PARM_DESC(is_attacker, "foo");
+
+static unsigned int is_victim;
+module_param(is_victim, uint, S_IRUGO);
+MODULE_PARM_DESC(is_victim, "foo");
 
 static char *set_page_mergeable(const char *content)
 {
 	char *buf = (char *)get_zeroed_page(GFP_KERNEL);
 	strcpy(buf, content);
 	phys_addr_t granule = virt_to_phys(buf);
+
+	const char *entity = is_attacker ? "Attacker" :
+			     is_victim ? "Victim" : "?";
+
 	pr_info("%s: Sending SMC_RSI_SET_PAGES_MERGEABLE content=%s ipa=%llx\n",
-		is_attacker ? "Attacker" : "Victim", buf, granule);
+		entity, buf, granule);
 	struct arm_smccc_res res;
 	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE, granule, 4096, &res);
 	return buf;
@@ -276,14 +284,13 @@ static int __init arm_cca_guest_init(void)
 		pr_err("Error %d registering with TSM\n", ret);
 
 	pr_info("is_attacker=%d\n", is_attacker);
+	pr_info("is_victim=%d\n", is_victim);
 
 	if (is_attacker) {
 		schedule_delayed_work(&attacker_work, 3000);
-	} else {
+	} else if (is_victim) {
 		schedule_delayed_work(&victim_work, 300);
 	}
-
-	// buf1[0] = 'x';
 
 	return ret;
 }

@@ -1373,6 +1373,43 @@ static int kvm_rme_config_realm(struct kvm *kvm, struct kvm_enable_cap *cap)
 #include "linux/pagemap.h"
 long mapping_evict_folio(struct address_space *mapping, struct folio *folio);
 
+static int cca_reclaim_merged_pages(void)
+{
+	struct arm_smccc_res res = {0};
+	int ret = 0;
+
+	u64 *hpa_array = (u64 *)get_zeroed_page(GFP_KERNEL);
+
+	arm_smccc_1_1_invoke(SMC_RMI_RECLAIM_MERGEABLE_PAGE,
+				virt_to_phys(hpa_array), &res);
+	if (res.a0) {
+		ret = -EINVAL;
+		goto out;
+	}
+	for (int i = 0; i < 512; i++) {
+		u64 hpa = hpa_array[i];
+		if (!hpa) {
+			break;
+		}
+		u64 ipa = (uint64_t)xa_load(&converted_pages, hpa);
+		struct page *page = phys_to_page(hpa);
+		struct folio *folio = page_folio(page);
+		struct inode *inode = folio->mapping->host;
+
+		folio_lock(folio);
+		mapping_evict_folio(inode->i_mapping, folio);
+		folio_unlock(folio);
+
+		pr_info("[%d] Reclaimed pa=%llx ipa=%llx page_ref_count(page)=%d\n",
+			i, hpa, ipa, page_ref_count(page));
+
+		put_page(page);
+	}
+out:
+	free_page((unsigned long)hpa_array);
+	return ret;
+}
+
 int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 {
 	int r = 0;
@@ -1415,29 +1452,7 @@ int kvm_realm_enable_cap(struct kvm *kvm, struct kvm_enable_cap *cap)
 		r = kvm_activate_realm(kvm);
 		break;
 	case KVM_CAP_ARM_RME_RECLAIM_MERGED_PAGE: {
-		struct arm_smccc_res res = {0};
-		uint64_t hpa, ipa;
-		struct page *page;
-		struct folio *folio;
-		struct inode *inode;
-
-		arm_smccc_1_1_invoke(SMC_RMI_RECLAIM_MERGEABLE_PAGE, 123, &res);
-		if (res.a0) {
-			r = -EINVAL;
-			break;
-		}
-		hpa = res.a1;
-		ipa = (uint64_t)xa_load(&converted_pages, hpa);
-		page = phys_to_page(hpa);
-		folio = page_folio(page);
-		inode = folio->mapping->host;
-		folio_lock(folio);
-		mapping_evict_folio(inode->i_mapping, folio);
-		folio_unlock(folio);
-		pr_info("Reclaimed pa=%llx ipa=%llx page_ref_count(page)=%d\n",
-			hpa, ipa, page_ref_count(page));
-		put_page(page);
-		r = 0;
+		r = cca_reclaim_merged_pages();
 		break;
 	}
 	default:

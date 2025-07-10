@@ -107,6 +107,8 @@ static inline int rmi_features(unsigned long index, unsigned long *out)
 	return res.a0;
 }
 
+#include "linux/printk.h"
+
 /**
  * rmi_granule_delegate() - Delegate a granule
  * @phys: PA of the granule

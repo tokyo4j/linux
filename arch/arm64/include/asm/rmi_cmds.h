@@ -107,6 +107,8 @@ static inline int rmi_features(unsigned long index, unsigned long *out)
 	return res.a0;
 }
 
+#include "linux/printk.h"
+
 /**
  * rmi_granule_delegate() - Delegate a granule
  * @phys: PA of the granule
@@ -119,6 +121,7 @@ static inline int rmi_granule_delegate(unsigned long phys)
 {
 	struct arm_smccc_res res;
 
+	pr_info("rmi_granule_delegate(): %lx\n", phys);
 	arm_smccc_1_1_invoke(SMC_RMI_GRANULE_DELEGATE, phys, &res);
 
 	return res.a0;
@@ -137,6 +140,7 @@ static inline int rmi_granule_undelegate(unsigned long phys)
 {
 	struct arm_smccc_res res;
 
+	pr_info("rmi_granule_undelegate(): %lx\n", phys);
 	arm_smccc_1_1_invoke(SMC_RMI_GRANULE_UNDELEGATE, phys, &res);
 
 	return res.a0;

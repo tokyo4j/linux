@@ -219,7 +219,7 @@ static char *set_page_mergeable(const char *content)
 	return buf;
 }
 
-static char *pages[64];
+static char *pages[16];
 
 static void send_ipa_to_host(uint64_t id, uint64_t va)
 {
@@ -233,14 +233,13 @@ static void send_ipa_to_host(uint64_t id, uint64_t va)
 
 static void victim_func(struct work_struct *work)
 {
+    const char *contents[16] = {
+        "AAA", "BBB", "CCC", "BBB", "DDD", "BBB", "AAA", "AAA",
+        "AAA", "BBB", "CCC", "AAA", "CCC", "CCC", "BBB", "DDD",
+    };
+
 	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
-		char content[64];
-		if (i < (int)ARRAY_SIZE(pages) / 2) {
-			snprintf(content, sizeof(content), "hello-%c", 'a' + i);
-		} else {
-			snprintf(content, sizeof(content), "victim-%c", 'a' + i);
-		}
-		pages[i] = set_page_mergeable(content);
+		pages[i] = set_page_mergeable(contents[i]);
 		send_ipa_to_host(0xdeadcafe, (uint64_t)pages[i]);
 		msleep(200);
 	}
@@ -249,19 +248,24 @@ DECLARE_DELAYED_WORK(victim_work, victim_func);
 
 static void attacker_func(struct work_struct *work)
 {
+    const char *contents[16] = {
+        "AAA", "BBB", "CCC", "AAA", "CCC", "CCC", "BBB", "DDD",
+        "AAA", "BBB", "CCC", "BBB", "DDD", "BBB", "AAA", "AAA",
+    };
+
 	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
-		char content[64];
-		if (i < (int)ARRAY_SIZE(pages) / 2) {
-			snprintf(content, sizeof(content), "hello-%c", 'a' + i);
-		} else {
-			snprintf(content, sizeof(content), "attacker-%c", 'a' + i);
-		}
-		pages[i] = set_page_mergeable(content);
-		send_ipa_to_host(0xdeadcaff, (uint64_t)pages[i]);
+		pages[i] = set_page_mergeable(contents[i]);
+		send_ipa_to_host(0xdeadcafe, (uint64_t)pages[i]);
 		msleep(200);
 	}
 }
 DECLARE_DELAYED_WORK(attacker_work, attacker_func);
+
+static void read_merged_func(struct work_struct *work)
+{
+    pr_info("merged content (%llx) = %s\n", __pa(pages[0]), pages[0]);
+}
+DECLARE_DELAYED_WORK(read_merged_work, read_merged_func);
 
 /**
  * arm_cca_guest_init - Register with the Trusted Security Module (TSM)
@@ -291,6 +295,8 @@ static int __init arm_cca_guest_init(void)
 	} else if (is_victim) {
 		schedule_delayed_work(&victim_work, 300);
 	}
+
+    schedule_delayed_work(&read_merged_work, 6000);
 
 	return ret;
 }

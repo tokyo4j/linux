@@ -12,6 +12,8 @@
 #include <asm/kvm_rme.h>
 #include <asm/kvm_mmu.h>
 
+#include <linux/arm-smccc.h>
+
 typedef int (*exit_handler_fn)(struct kvm_vcpu *vcpu);
 
 static int rec_exit_reason_notimpl(struct kvm_vcpu *vcpu)
@@ -196,6 +198,15 @@ int handle_rec_exit(struct kvm_vcpu *vcpu, int rec_run_ret)
 		return rec_exit_ripas_change(vcpu);
 	case RMI_EXIT_HOST_CALL:
 		return rec_exit_host_call(vcpu);
+	case RMI_EXIT_UNMERGE_ALLOC: {
+		struct arm_smccc_res res = {0};
+		struct page *page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+		arm_smccc_1_1_invoke(SMC_RMI_ACK_SET_PAGES_UNMERGEABLE,
+			virt_to_phys(rec->rec_page), virt_to_phys(page), &res);
+		pr_err("RMI_EXIT_UNMERGE_ALLOC %x %ld\n",
+			SMC_RMI_ACK_SET_PAGES_UNMERGEABLE, res.a0);
+		return kvm_smccc_call_handler(vcpu);
+	}
 	}
 
 	kvm_pr_unimpl("Unsupported exit reason: %u\n",

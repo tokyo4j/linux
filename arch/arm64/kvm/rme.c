@@ -1542,6 +1542,9 @@ int kvm_rec_enter(struct kvm_vcpu *vcpu)
 	case RMI_EXIT_RIPAS_CHANGE:
 		kvm_complete_ripas_change(vcpu);
 		break;
+	case RMI_EXIT_UNMERGE_ALLOC:
+		pr_info("RMI_EXIT_UNMERGE_ALLOC entering\n");
+		break;
 	}
 
 	if (kvm_realm_state(vcpu->kvm) != REALM_STATE_ACTIVE)

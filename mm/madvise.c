@@ -1243,6 +1243,7 @@ static long madvise_guard_remove(struct vm_area_struct *vma,
 
 struct mergeable_chunk {
 	unsigned long start_pa, end_pa;
+	bool merge;
 };
 
 static void
@@ -1256,9 +1257,12 @@ set_chunk_mergeable(struct mergeable_chunk *chunk)
 		struct page *page = phys_to_page(pa);
 		set_bit(PG_cca_mergeable, &page->flags);
 	}
+
+	u64 op = chunk->merge ? SMC_RSI_SET_PAGES_MERGEABLE
+				: SMC_RSI_SET_PAGES_UNMERGEABLE;
 	struct arm_smccc_res res;
-	arm_smccc_1_1_invoke(SMC_RSI_SET_PAGES_MERGEABLE,
-		chunk->start_pa, chunk->end_pa - chunk->start_pa + 4096, &res);
+	arm_smccc_1_1_invoke(op, chunk->start_pa,
+		chunk->end_pa - chunk->start_pa + 4096, &res);
 }
 
 static int
@@ -1296,9 +1300,9 @@ const struct mm_walk_ops cca_mm_walk_ops = {
 };
 
 static int
-set_range_mergeable(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+set_range_mergeable(struct vm_area_struct *vma, unsigned long start, unsigned long end, bool merge)
 {
-	struct mergeable_chunk chunk = {0};
+	struct mergeable_chunk chunk = {.merge = merge};
 	if (!is_realm_world()) {
 		return 0;
 	}
@@ -1389,7 +1393,9 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 	case MADV_COLLAPSE:
 		return madvise_collapse(vma, prev, start, end);
 	case MADV_CCA_MERGEABLE:
-		return set_range_mergeable(vma, start, end);
+		return set_range_mergeable(vma, start, end, true);
+	case MADV_CCA_UNMERGEABLE:
+		return set_range_mergeable(vma, start, end, false);
 	case MADV_GUARD_INSTALL:
 		return madvise_guard_install(vma, prev, start, end);
 	case MADV_GUARD_REMOVE:
@@ -1500,6 +1506,7 @@ madvise_behavior_valid(int behavior)
 	case MADV_HWPOISON:
 #endif
 	case MADV_CCA_MERGEABLE:
+	case MADV_CCA_UNMERGEABLE:
 		return true;
 
 	default:

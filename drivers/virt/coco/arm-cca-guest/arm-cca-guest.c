@@ -219,7 +219,7 @@ static char *set_page_mergeable(const char *content)
 	return buf;
 }
 
-static char *pages[64];
+static char *pages[32];
 
 static void send_ipa_to_host(uint64_t id, uint64_t va)
 {
@@ -235,7 +235,8 @@ static void victim_func(struct work_struct *work)
 {
 	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
 		char content[64];
-		if (i == 10 || i == 19 || i == 28 || i == 37 || i == 46 || i == 55) {
+		if (i == 4 || i == 7 || i == 10 || i == 15
+				|| i == 22 || i == 24 || i == 25 || i == 31) {
 			snprintf(content, sizeof(content), "pwd-%c", 'a' + i);
 		} else {
 			snprintf(content, sizeof(content), "victim-%c", 'a' + i);

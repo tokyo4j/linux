@@ -235,8 +235,8 @@ static void victim_func(struct work_struct *work)
 {
 	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
 		char content[64];
-		if (i < (int)ARRAY_SIZE(pages) / 2) {
-			snprintf(content, sizeof(content), "hello-%c", 'a' + i);
+		if (i == 10 || i == 19 || i == 28 || i == 37 || i == 46 || i == 55) {
+			snprintf(content, sizeof(content), "pwd-%c", 'a' + i);
 		} else {
 			snprintf(content, sizeof(content), "victim-%c", 'a' + i);
 		}
@@ -251,11 +251,7 @@ static void attacker_func(struct work_struct *work)
 {
 	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
 		char content[64];
-		if (i < (int)ARRAY_SIZE(pages) / 2) {
-			snprintf(content, sizeof(content), "hello-%c", 'a' + i);
-		} else {
-			snprintf(content, sizeof(content), "attacker-%c", 'a' + i);
-		}
+		snprintf(content, sizeof(content), "pwd-%c", 'a' + i);
 		pages[i] = set_page_mergeable(content);
 		send_ipa_to_host(0xdeadcaff, (uint64_t)pages[i]);
 		msleep(200);

